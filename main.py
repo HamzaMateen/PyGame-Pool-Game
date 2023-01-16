@@ -2,9 +2,11 @@ import pygame
 import pymunk 
 import math 
 import pymunk.pygame_util 
+import random 
 
 pygame.init()
 WIDTH, HEIGHT = 1200, 678
+
 
 # game window 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -26,11 +28,18 @@ clock = pygame.time.Clock()
 
 # game variables
 diameter = 36
-taking_shot = True 
+packet_diameter = 66
 force = 0
-max_force = 10_000
+max_force = 15000
 force_direction = 1
+taking_shot = True 
 powering_up = False
+potted_ball = []
+
+# ball_out_of_board = False
+
+# colors 
+bar_color = [180, 180, 0]
 
 # create a ball
 def create_ball(radius, position):
@@ -38,16 +47,16 @@ def create_ball(radius, position):
     body.position = position
 
     shape = pymunk.Circle(body, radius)
-    shape.mass = 50
+    shape.mass = 5
 
     # add bouncing capabilities 
-    shape.elasticity = 0.95
+    shape.elasticity = 0.8
 
     # pivot joint to add friction 
     # (0, 0) -> center of both objects
     pivot = pymunk.PivotJoint(static_body, body, (0, 0), (0, 0))
     pivot.max_bias = 0  # no headstart in friction 
-    pivot.max_force = 10000 # linear friction 
+    pivot.max_force = 1000 # linear friction 
 
 
     space.add(body, pivot, shape)
@@ -75,8 +84,8 @@ for col in range(5):
 cue_ball = create_ball(diameter / 2, (888, HEIGHT // 2))
 balls.append(cue_ball)
 
-#create six pockets on table
-pockets = [
+#create six pockets on table,
+pockets = [ # center of pockets on the table
   (55, 63),
   (592, 48),
   (1134, 64),
@@ -139,6 +148,10 @@ for i in range(1, 17):
     ball_image = pygame.image.load(f".\\assets\\images\\ball_{i}.png").convert_alpha()
     ball_images.append(ball_image)
 
+# power bars show how hard the cue ball will be hit 
+power_bar = pygame.Surface()
+power_bar.fill(bar_color)
+
 while running:
     clock.tick(FPS)
     space.step(1 / FPS)
@@ -149,6 +162,11 @@ while running:
     # draw pool table 
     screen.blit(table_image, (0, 0)) # from left-top corner
 
+    # check if any pool ball has been potted 
+    # checking each ball for each pocket per loop run --- THAT's A LOT OF HECKS BRO
+    for ball in balls:
+        for pocket in pockets:
+            ball_x_dist = abs(ball.body.position[0] - pocket[0])
     # draw pool balls
     for index, ball in enumerate(balls):
         # compatibility issue between pygame and pymunk - incorrect mapping of positions 
@@ -159,7 +177,11 @@ while running:
     # check if all balls have stopped moving so that the cue should reappear
     taking_shot = True
     for ball in balls:
-        if int(ball.body.velocity[0]) != 0 or int(ball.body.velocity[1]) != 0:
+        # check if ball is out out board
+        # if ball.body.position[0] > WIDTH and ball.body.position[1] > HEIGHT:
+        #     ball_out_of_board = True
+
+        if (int(ball.body.velocity[0]) != 0 or int(ball.body.velocity[1]) != 0):
             taking_shot = False
 
     # draw cue ball
@@ -179,14 +201,27 @@ while running:
     if powering_up:
         force += 100 * force_direction
 
-        if force >= max_force or force < 0:
-            force_direction *= (-1)
-        print(force)
+        if force >= max_force or force <= 0:
+            force_direction *= -1
 
-        # increaes force 
+        # represent the force with power bars 
+        # our max_force is 150_000
+        # using 6 power bars, we represent total force where
+        # each bar stands for (max_force / 6) units of force
+        for b in range(force // 2000):
+            bar_color[0] += 10
+            bar_color[1] -= 20
+
+            power_bar.fill(bar_color)
+            screen.blit(power_bar, (balls[-1].body.position[0] - 20 + (b*15), balls[-1].body.position[1] + 30))
+
+        bar_color = [180, 180, 0] # reset color 
+        power_bar.fill(bar_color)
+
     elif not powering_up and taking_shot:
         x_dir_impulse = math.cos(math.radians(cue_angle)) * force
         y_dir_impulse = math.sin(math.radians(cue_angle)) * force
+
         balls[-1].body.apply_impulse_at_local_point((-x_dir_impulse, y_dir_impulse), (0, 0))
 
         force = 0 # reset zero
